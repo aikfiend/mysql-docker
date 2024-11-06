@@ -30,10 +30,11 @@ Running in a container requires a working InnoDB cluster.
 
 The image uses the following optional variables:
 
-| Variable                 | Description                                 |
-| ------------------------ | ------------------------------------------- |
-| MYSQL_INNODB_CLUSTER_MEMBERS | Wait for at least this number of cluster instances to be ONLINE |
-| MYSQL_CREATE_ROUTER_USER | Whether to create a new account for the Router to use when it's running. Defaults to 1, set to 0 to disable. |
+| Variable                             | Description                                 |
+| ------------------------------------ | ------------------------------------------- |
+| MYSQL_INNODB_CLUSTER_MEMBERS         | Wait for at least this number of cluster instances to be ONLINE |
+| MYSQL_CREATE_ROUTER_USER             | Whether to create a new account for the Router to use when it's running. Defaults to 1, set to 0 to disable. |
+| MYSQL_ROUTER_BOOTSTRAP_EXTRA_OPTIONS | Additional command line options applied while bootstrapping
 
 If supplied the run script waits for the given mysql host to be up, the InnoDB cluster to have
 MYSQL_INNODB_CLUSTER_MEMBERS members and then uses the given server for its
@@ -44,6 +45,12 @@ The image can be run via:
 
 ```
 docker run -e MYSQL_HOST=localhost -e MYSQL_PORT=3306 -e MYSQL_USER=mysql -e MYSQL_PASSWORD=mysql -e MYSQL_INNODB_CLUSTER_MEMBERS=3 -ti mysql/mysql-router
+```
+
+Additional command line options for running MySQL Router after bootstrap can be passed a command options. For instance you can use a config file from your home directory like this:
+
+```
+docker run -e MYSQL_HOST=localhost -e MYSQL_PORT=3306 -e MYSQL_USER=mysql -e MYSQL_PASSWORD=mysql -ti -v $HOME/router-extra.conf:/tmp/router-extra.conf mysql/mysql-router mysqlrouter --extra-config=/tmp/router-extra.conf
 ```
 
 It can be verified by typing:
@@ -57,6 +64,8 @@ The following output should be displayed:
 ```
 4954b1c80be1 mysql-router:8.0 "/run.sh mysqlrouter" About a minute ago Up About a minute (healthy) 6447/tcp, 6448/tcp, 0.0.0.0:6446->6446/tcp, 6449/tcp innodbcluster_mysql-router_1
 ```
+
+By default the container will run as user 999:999 which maps to mysqlrouter:mysqlrouter inside the container.
 
 # Exposed Ports
 

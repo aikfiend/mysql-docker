@@ -18,20 +18,26 @@ source ./VERSION
 
 if grep -q Microsoft /proc/version; then
   echo "Running on Windows Subsystem for Linux"
-  # WSL doesn't have its own docker host, we have to use the one 
+  # WSL doesn't have its own docker host, we have to use the one
   # from Windows itself.
   # https://medium.com/@sebagomez/installing-the-docker-client-on-ubuntus-windows-subsystem-for-linux-612b392a44c4
   export DOCKER_HOST=localhost:2375
 fi
 
 REPO=mysql/mysql-server; [ -n "$1" ] && REPO=$1
+MAJOR_VERSIONS=("${!MYSQL_SERVER_VERSIONS[@]}"); [ -n "$2" ] && MAJOR_VERSIONS=("${@:2}")
 
-for MAJOR_VERSION in ${MULTIARCH_VERSIONS}; do
-  MANIFEST_VERSIONS=$(./tag.sh "" "$MAJOR_VERSION")
-  for MANIFEST_VERSION in $MANIFEST_VERSIONS; do
-    docker manifest create "$REPO:$MANIFEST_VERSION" "$REPO:$MANIFEST_VERSION-aarch64" "$REPO:$MANIFEST_VERSION-amd64"
-    docker manifest annotate "$REPO:$MANIFEST_VERSION" "$REPO:$MANIFEST_VERSION-aarch64" --os linux --arch arm64
-    docker manifest annotate "$REPO:$MANIFEST_VERSION" "$REPO:$MANIFEST_VERSION-amd64" --os linux --arch amd64
-    docker manifest push "$REPO:$MANIFEST_VERSION"
-  done
+WEEKLY=0
+if [[ "$REPO" =~ (weekly) ]]; then
+  WEEKLY=1
+fi
+
+MANIFEST_VERSIONS=$(./tag.sh "" "$WEEKLY" "${MAJOR_VERSIONS[@]}")
+echo ${MANIFEST_VERSIONS}
+for MANIFEST_VERSION in $MANIFEST_VERSIONS; do
+  docker pull "$REPO:$MANIFEST_VERSION-arm64" "$REPO:$MANIFEST_VERSION-amd64"
+  docker manifest create "$REPO:$MANIFEST_VERSION" "$REPO:$MANIFEST_VERSION-arm64" "$REPO:$MANIFEST_VERSION-amd64"
+  docker manifest add "$REPO:$MANIFEST_VERSION" "$REPO:$MANIFEST_VERSION-arm64" --os linux --arch arm64
+  docker manifest add "$REPO:$MANIFEST_VERSION" "$REPO:$MANIFEST_VERSION-amd64" --os linux --arch amd64
+  docker manifest push "$REPO:$MANIFEST_VERSION" "docker://$REPO:$MANIFEST_VERSION"
 done

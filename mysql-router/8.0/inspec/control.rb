@@ -1,21 +1,20 @@
 control 'container' do
   impact 0.5
-  describe docker_container('mysql-router-8.0') do
-    it { should exist }
-    it { should be_running }
-    its('repo') { should eq 'mysql/mysql-router' }
-    its('ports') { should eq '6446-6449/tcp, 8443/tcp' }
-    its('command') { should match '/run.sh.*' }
+  describe podman.containers do
+    its('status') { should cmp /Up/ }
+    its('commands') { should cmp /sleep/ }
+    its('images') { should cmp /mysql-router:8.0/ }
+    its('names') { should include "mysql-router-8.0" }
   end
 end
 control 'packages' do
   impact 0.5
   describe package('mysql-community-client') do
     it { should be_installed }
-    its ('version') { should match '8.0.27.*' }
+    its ('version') { should match '8.0.40.*' }
   end
   describe package('mysql-router-community') do
     it { should be_installed }
-    its ('version') { should match '8.0.27.*' }
+    its ('version') { should match '8.0.40.*' }
   end
 end

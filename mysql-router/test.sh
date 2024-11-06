@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2018, 2021, Oracle and/or its affiliates.
+# Copyright (c) 2018, 2023, Oracle and/or its affiliates.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,11 +20,24 @@
 set -e
 source ./VERSION
 
-for MAJOR_VERSION in "${!MYSQL_ROUTER_VERSIONS[@]}"
-do
-    docker run -d -e MYSQL_HOST=x -e MYSQL_PORT=9 -e MYSQL_USER=x -e MYSQL_PASSWORD=x -e MYSQL_INNODB_CLUSTER_MEMBERS=1 --name "mysql-router-$MAJOR_VERSION" mysql/mysql-router:$MAJOR_VERSION sleep 5000
-    inspec exec $MAJOR_VERSION/inspec/control.rb --controls container
-    inspec exec $MAJOR_VERSION/inspec/control.rb -t "docker://mysql-router-$MAJOR_VERSION" --controls packages
-    docker stop "mysql-router-$MAJOR_VERSION"
-    docker rm "mysql-router-$MAJOR_VERSION"
+ARCH=amd64; [ -n "$1" ] && ARCH=$1
+WEEKLY=''; [ -n "$2" ] && WEEKLY=$2
+MAJOR_VERSIONS=("${!MYSQL_ROUTER_VERSIONS[@]}"); [ -n "$3" ] && MAJOR_VERSIONS=("${@:3}")
+
+for MAJOR_VERSION in "${MAJOR_VERSIONS[@]}"; do
+   if [ "$WEEKLY" == "1" ]; then
+     ROUTER_VERSION=${WEEKLY_ROUTER_VERSIONS["${MAJOR_VERSION}"]}
+   else
+     ROUTER_VERSION=${MYSQL_ROUTER_VERSIONS["${MAJOR_VERSION}"]}
+   fi
+   MAJOR_VERSION=${ROUTER_VERSION%.*}
+   podman run -d --rm -e MYSQL_HOST=x -e MYSQL_PORT=9 -e MYSQL_USER=x -e MYSQL_PASSWORD=x -e MYSQL_INNODB_CLUSTER_MEMBERS=1 --name "mysql-router-$MAJOR_VERSION" mysql/mysql-router:$MAJOR_VERSION-$ARCH sleep 5000
+   export DOCKER_HOST=unix:///tmp/podman.sock
+   podman system service --time=0 ${DOCKER_HOST} & DOCKER_SOCK_PID="$!"
+   inspec exec $MAJOR_VERSION/inspec/control.rb --controls container
+   inspec exec $MAJOR_VERSION/inspec/control.rb -t "docker://mysql-router-$MAJOR_VERSION" --controls packages
+   podman stop -i "mysql-router-$MAJOR_VERSION"
+   podman rm -i -f "mysql-router-$MAJOR_VERSION"
+   kill -TERM ${DOCKER_SOCK_PID}
+   rm -f /tmp/podman.sock
 done

@@ -13,18 +13,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
-FROM oraclelinux:7-slim
+FROM container-registry.oracle.com/os/oraclelinux:7-slim
 
-ARG MYSQL_CLUSTER_PACKAGE=mysql-cluster-community-server-minimal-7.5.24
-ARG MYSQL_SHELL_PACKAGE=mysql-shell-8.0.27
+ARG MYSQL_SERVER_PACKAGE=mysql-cluster-community-server-minimal-7.5.32
+ARG MYSQL_SHELL_PACKAGE=mysql-shell-8.0.35
 
 # Setup repositories for minimal packages (all versions)
-RUN rpm -U https://repo.mysql.com/mysql-cluster-community-minimal-release-el7.rpm \
-  && rpm -U https://repo.mysql.com/mysql80-community-release-el7.rpm
+RUN rpm -U http://repo.mysql.oraclecorp.com/mysql-uat/repos-stage/mysql-cluster-community-minimal-release-el7.rpm \
+  && rpm -U http://repo.mysql.oraclecorp.com/mysql-uat/repos-stage/mysql80-community-release-el7.rpm
 
 # Install server and shell 8.0
 RUN yum install -y $MYSQL_SHELL_PACKAGE \
-  && yum install -y $MYSQL_CLUSTER_PACKAGE --enablerepo=mysql-cluster75-minimal\
+  && yum install -y $MYSQL_SERVER_PACKAGE --enablerepo=mysql-cluster75-community-minimal\
   && yum clean all \
   && mkdir /docker-entrypoint-initdb.d
 

@@ -1,17 +1,43 @@
-IMAGE_VERSION=1.2.6-server
+IMAGE_VERSION=1.2.19-server
 
-declare -A MYSQL_SERVER_VERSIONS
-MYSQL_SERVER_VERSIONS["5.7"]=5.7.36
-MYSQL_SERVER_VERSIONS["8.0"]=8.0.27
+# LATEST is always set to the
+# current highest release, which is,
+# either 'innovation' or an LTS series
+# i.e. 9.7, or 10.7
 
-declare -A MYSQL_SHELL_VERSIONS
-MYSQL_SHELL_VERSIONS["5.7"]=8.0.27
-MYSQL_SHELL_VERSIONS["8.0"]=8.0.27
+LATEST="innovation"
 
-declare -A FULL_SERVER_VERSIONS
-FULL_SERVER_VERSIONS["5.7"]="${MYSQL_SERVER_VERSIONS["5.7"]}-${IMAGE_VERSION}"
-FULL_SERVER_VERSIONS["8.0"]="${MYSQL_SERVER_VERSIONS["8.0"]}-${IMAGE_VERSION}"
 
-MULTIARCH_VERSIONS="8.0"
-SINGLEARCH_VERSIONS="5.7"
-LATEST="8.0"
+
+# LATEST_LTS is set to the highest
+# LTS series currently being released
+# i.e. when 9.7 release will come it
+# will be set to 9.7 up till 10.7 and
+# then 10.7 and so on
+
+LATEST_LTS="8.4"
+
+
+
+# The value of key should be series
+# i.e. 8.0, 8.4, innovation, 9.7, etc.
+# do not use any other value for key
+# like 'latest-8.4' or 'lts-84', etc.
+
+declare -A MYSQL_SERVER_VERSIONS WEEKLY_SERVER_VERSIONS
+MYSQL_SERVER_VERSIONS["8.0"]=8.0.40
+MYSQL_SERVER_VERSIONS["8.4"]=8.4.3
+MYSQL_SERVER_VERSIONS["innovation"]=9.1.0
+
+WEEKLY_SERVER_VERSIONS["8.0"]=8.0.40
+WEEKLY_SERVER_VERSIONS["8.4"]=8.4.3
+WEEKLY_SERVER_VERSIONS["innovation"]=9.2.0
+
+declare -A MYSQL_SHELL_VERSIONS WEEKLY_SHELL_VERSIONS
+MYSQL_SHELL_VERSIONS["8.0"]=8.0.40
+MYSQL_SHELL_VERSIONS["8.4"]=8.4.3
+MYSQL_SHELL_VERSIONS["innovation"]=9.1.0
+
+WEEKLY_SHELL_VERSIONS["8.0"]=8.0.40
+WEEKLY_SHELL_VERSIONS["8.4"]=8.4.3
+WEEKLY_SHELL_VERSIONS["innovation"]=9.2.0

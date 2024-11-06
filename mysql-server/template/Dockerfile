@@ -1,4 +1,4 @@
-# Copyright (c) 2017, 2021, Oracle and/or its affiliates.
+# Copyright (c) 2017, 2023, Oracle and/or its affiliates.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,21 +13,21 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
 
-FROM oraclelinux:8-slim
+FROM container-registry.oracle.com/os/oraclelinux:9-slim
 
 ARG MYSQL_SERVER_PACKAGE=%%MYSQL_SERVER_PACKAGE%%
 ARG MYSQL_SHELL_PACKAGE=%%MYSQL_SHELL_PACKAGE%%
 
 # Setup repositories for minimal packages (all versions)
-RUN rpm -U %%REPO%%/mysql-community-minimal-release-el8.rpm \
-  && rpm -U %%REPO%%/mysql80-community-release-el8.rpm
+RUN rpm -U %%REPO%%/%%CONFIG_PACKAGE_NAME_MINIMAL%% \
+  && rpm -U %%REPO%%/%%CONFIG_PACKAGE_NAME%%
 
 # Install server and shell 8.0
 RUN microdnf update && echo "[main]" > /etc/dnf/dnf.conf \
-  && microdnf install -y $MYSQL_SHELL_PACKAGE \
-  && microdnf install -y --disablerepo=ol8_appstream \
-   --enablerepo=mysql%%REPO_VERSION%%-server-minimal $MYSQL_SERVER_PACKAGE \
-  && rpm --nodeps -e python36 \
+  && microdnf install -y --enablerepo=%%REPO_NAME_TOOLS%% $MYSQL_SHELL_PACKAGE \
+  && microdnf install -y --disablerepo=ol9_appstream \
+   --enablerepo=%%REPO_NAME_SERVER%% $MYSQL_SERVER_PACKAGE \
+  && microdnf remove -y %%MYSQL_CONFIG_PKG_MINIMAL%% %%MYSQL_CONFIG_PKG%% \
   && microdnf clean all \
   && mkdir /docker-entrypoint-initdb.d
 

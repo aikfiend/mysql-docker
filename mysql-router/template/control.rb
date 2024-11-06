@@ -1,21 +1,20 @@
 control 'container' do
   impact 0.5
-  describe docker_container('mysql-router-%%MAJOR_VERSION%%') do
-    it { should exist }
-    it { should be_running }
-    its('repo') { should eq 'mysql/mysql-router' }
-    its('ports') { should eq '6446-6449/tcp, 8443/tcp' }
-    its('command') { should match '/run.sh.*' }
+  describe podman.containers do
+    its('status') { should cmp /Up/ }
+    its('commands') { should cmp /sleep/ }
+    its('images') { should cmp /mysql-router:%%MAJOR_VERSION%%/ }
+    its('names') { should include "mysql-router-%%MAJOR_VERSION%%" }
   end
 end
 control 'packages' do
   impact 0.5
-  describe package('mysql-community-client') do
+  describe package('%%MYSQL_CLIENT_PACKAGE_NAME%%') do
     it { should be_installed }
-    its ('version') { should match '%%MYSQL_CLIENT_PACKAGE_VERSION%%.*' }
+    its ('version') { should match '%%MYSQL_CLIENT_VERSION%%.*' }
   end
-  describe package('mysql-router-community') do
+  describe package('%%MYSQL_ROUTER_PACKAGE_NAME%%') do
     it { should be_installed }
-    its ('version') { should match '%%MYSQL_ROUTER_PACKAGE_VERSION%%.*' }
+    its ('version') { should match '%%MYSQL_ROUTER_VERSION%%.*' }
   end
 end

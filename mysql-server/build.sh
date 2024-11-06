@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2018, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2018, 2023 Oracle and/or its affiliates. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,17 +25,21 @@ if grep -q Microsoft /proc/version; then
 fi
 
 ARCH=amd64; [ -n "$1" ] && ARCH=$1
-MAJOR_VERSIONS=("${!MYSQL_SERVER_VERSIONS[@]}"); [ -n "$2" ] && MAJOR_VERSIONS=("${@:2}")
+BUILD_TYPE=community; [ -n "$2" ] && BUILD_TYPE=$2
+MAJOR_VERSIONS=("${!MYSQL_SERVER_VERSIONS[@]}"); [ -n "$3" ] && MAJOR_VERSIONS=("${@:3}")
+
+if [[ ${BUILD_TYPE} =~ (commercial) ]]; then
+   IMG_LOC=store/oracle/mysql-enterprise-server
+else
+   IMG_LOC=mysql/mysql-server
+fi
 
 for MAJOR_VERSION in "${MAJOR_VERSIONS[@]}"; do
-  for MULTIARCH_VERSION in ${MULTIARCH_VERSIONS}; do
-    if [[ "$MULTIARCH_VERSION" == "$MAJOR_VERSION" ]]; then
-      docker build --build-arg http_proxy="$http_proxy" --build-arg https_proxy="$http_proxy" --build-arg no_proxy="$no_proxy" -t mysql/mysql-server:"$MAJOR_VERSION"-$ARCH "$MAJOR_VERSION"
+    if [[ "$BUILD_TYPE" =~ (weekly) ]]; then
+        SERVER_VERSION=${WEEKLY_SERVER_VERSIONS["${MAJOR_VERSION}"]}
+    else
+        SERVER_VERSION=${MYSQL_SERVER_VERSIONS["${MAJOR_VERSION}"]}
     fi
-  done
-  for SINGLEARCH_VERSION in $SINGLEARCH_VERSIONS; do
-    if [[ "$SINGLEARCH_VERSION" == "$MAJOR_VERSION" ]]; then
-      docker build --build-arg http_proxy="$http_proxy" --build-arg https_proxy="$http_proxy" --build-arg no_proxy="$no_proxy" -t mysql/mysql-server:"$MAJOR_VERSION" "$MAJOR_VERSION"
-    fi
-  done
+    MAJOR_VERSION=${SERVER_VERSION%.*}
+    docker build --build-arg http_proxy="$http_proxy" --build-arg https_proxy="$http_proxy" --build-arg no_proxy="$no_proxy" -t $IMG_LOC:"$MAJOR_VERSION"-$ARCH "$MAJOR_VERSION"
 done

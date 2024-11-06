@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2017, 2021, Oracle and/or its affiliates.
+# Copyright (c) 2017, 2023, Oracle and/or its affiliates.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,96 +22,110 @@ set -e
 source ./VERSION
 
 REPO=https://repo.mysql.com; [ -n "$1" ] && REPO=$1
-REPO_NAME=mysql; [ -n "$2" ] && REPO_NAME=$2
+MYSQL_VERSION=""; [ -n "$2" ] && MYSQL_VERSION=$2
+SHELL_VERSION=""; [ -n "$3" ] && SHELL_VERSION=$3
+CONFIG_PACKAGE_NAME=mysql80-community-release-el9.rpm; [ -n "$4" ] && CONFIG_PACKAGE_NAME=$4
+CONFIG_PACKAGE_NAME_MINIMAL=mysql-cluster-community-minimal-release-el9.rpm; [ -n "$5" ] && CONFIG_PACKAGE_NAME_MINIMAL=$5
 
-declare -A PASSWORDSET
-PASSWORDSET["7.5"]="ALTER USER 'root'@'localhost' IDENTIFIED BY '\${MYSQL_ROOT_PASSWORD}';"
-PASSWORDSET["7.6"]=${PASSWORDSET["7.5"]}
-PASSWORDSET["8.0"]=${PASSWORDSET["7.6"]}
+REPO_NAME_SERVER=mysql-cluster80-community-minimal; [ -n "$6" ] && REPO_NAME_SERVER=$6
+REPO_NAME_TOOLS=mysql-tools-community; [ -n "$7" ] && REPO_NAME_TOOLS=$7
 
-declare -A DATABASE_INIT
-DATABASE_INIT["7.5"]="\"\$@\" --user=\$MYSQLD_USER --initialize-insecure"
-DATABASE_INIT["7.6"]="\"\$@\" --user=\$MYSQLD_USER --initialize-insecure"
-DATABASE_INIT["8.0"]="\"\$@\" --user=\$MYSQLD_USER --initialize-insecure"
+MYSQL_SERVER_PACKAGE_NAME="mysql-cluster-community-server-minimal"; [ -n "$8" ] && MYSQL_SERVER_PACKAGE_NAME=$8
+MYSQL_SHELL_PACKAGE_NAME="mysql-shell"; [ -n "$9" ] && MYSQL_SHELL_PACKAGE_NAME=$9
 
-# 5.7+ has the --daemonize flag, which makes the process fork and then exit when
-# the server is ready, removing the need for a fragile wait loop
-declare -A INIT_STARTUP
-INIT_STARTUP["7.5"]="\"\$@\" --user=\$MYSQLD_USER --daemonize --skip-networking --socket=\"\$SOCKET\""
-INIT_STARTUP["7.6"]="\"\$@\" --user=\$MYSQLD_USER --daemonize --skip-networking --socket=\"\$SOCKET\""
-INIT_STARTUP["8.0"]="\"\$@\" --user=\$MYSQLD_USER --daemonize --skip-networking --socket=\"\$SOCKET\""
+PORTS="3306 33060-33061 2202 1186"
 
-declare -A STARTUP
-STARTUP["7.5"]="exec \"\$@\" --user=\$MYSQLD_USER"
-STARTUP["7.6"]="exec \"\$@\" --user=\$MYSQLD_USER"
-STARTUP["8.0"]="export MYSQLD_PARENT_PID=\$\$ ; exec \"\$@\" --user=$MYSQLD_USER"
+PASSWORDSET="ALTER USER 'root'@'localhost' IDENTIFIED BY '\${MYSQL_ROOT_PASSWORD}';"
 
-declare -A STARTUP_WAIT
-STARTUP_WAIT["7.5"]="\"\""
-STARTUP_WAIT["7.6"]="\"\""
+DATABASE_INIT="\"\$@\" --user=\$MYSQLD_USER --initialize-insecure"
 
+STARTUP="export MYSQLD_PARENT_PID=\$\$ ; exec \"\$@\" --user=$MYSQLD_USER"
 
 # MySQL 8.0 supports a call to validate the config, while older versions have it as a side
 # effect of running --verbose --help
-declare -A VALIDATE_CONFIG
-VALIDATE_CONFIG["7.5"]="output=\$(\"\$@\" --verbose --help 2>\&1 > /dev/null) || result=\$?"
-VALIDATE_CONFIG["7.6"]="output=\$(\"\$@\" --verbose --help 2>\&1 > /dev/null) || result=\$?"
-VALIDATE_CONFIG["8.0"]="output=\$(\"\$@\" --validate-config) || result=\$?"
+VALIDATE_CONFIG="output=\$(\"\$@\" --validate-config) || result=\$?"
 
 # Data directories that must be created with special ownership and permissions when the image is built
-declare -A PRECREATE_DIRS
-PRECREATE_DIRS["7.5"]="/var/lib/mysql /var/lib/mysql-files /var/lib/mysql-keyring /var/run/mysqld"
-PRECREATE_DIRS["7.6"]="/var/lib/mysql /var/lib/mysql-files /var/lib/mysql-keyring /var/run/mysqld"
-PRECREATE_DIRS["8.0"]="/var/lib/mysql /var/lib/mysql-files /var/lib/mysql-keyring /var/run/mysqld"
+PRECREATE_DIRS="/var/lib/mysql /var/lib/mysql-files /var/lib/mysql-keyring /var/run/mysqld"
 
-for VERSION in "${!MYSQL_CLUSTER_VERSIONS[@]}"
-do
+process_version() {
+  MAJOR_VERSION=$1
+  MYSQL_SERVER_PACKAGE=${MYSQL_SERVER_PACKAGE_NAME}${SERVER_PKG_SUFFIX}
+  MYSQL_SHELL_PACKAGE=${MYSQL_SHELL_PACKAGE_NAME}${SHELL_PKG_SUFFIX}
+
   # Dockerfiles
-  MYSQL_CLUSTER_REPOPATH=yum/mysql-$VERSION-community/docker/x86_64
   DOCKERFILE_TEMPLATE=template/Dockerfile
-  if [ "${VERSION}" != "8.0" ]; then
+  if [[ "${MAJOR_VERSION}" =~ 7\.(5|6) ]]; then
     DOCKERFILE_TEMPLATE=template/Dockerfile-pre8
   fi
-  sed 's#%%MYSQL_CLUSTER_PACKAGE%%#'"mysql-cluster-community-server-minimal-${MYSQL_CLUSTER_VERSIONS[${VERSION}]}"'#g' $DOCKERFILE_TEMPLATE > tmpfile
-  sed -i 's#%%REPO%%#'"${REPO}"'#g' tmpfile
-  sed -i 's#%%REPO_NAME%%#'"${REPO_NAME}"'#g' tmpfile
-  REPO_VERSION=${VERSION//\./}
-  sed -i 's#%%REPO_VERSION%%#'"${REPO_VERSION}"'#g' tmpfile
-
-  if [[ ! -z ${MYSQL_SHELL_VERSIONS[${VERSION}]} ]]; then
-    sed -i 's#%%MYSQL_SHELL_PACKAGE%%#'"mysql-shell-${MYSQL_SHELL_VERSIONS[${VERSION}]}"'#g' tmpfile
-  else
-    sed -i 's#%%MYSQL_SHELL_PACKAGE%%#'""'#g' tmpfile
-  fi
-
-  mv tmpfile ${VERSION}/Dockerfile
 
   # Dockerfile_spec.rb
-  if [ ! -d "${VERSION}/inspec" ]; then
-    mkdir "${VERSION}/inspec"
+  if [ ! -d "${MAJOR_VERSION}" ]; then
+    mkdir "${MAJOR_VERSION}"
   fi
-  sed 's#%%MYSQL_CLUSTER_VERSION%%#'"${MYSQL_CLUSTER_VERSIONS[${VERSION}]}"'#g' template/control.rb > tmpFile
-  sed -i 's#%%MYSQL_SHELL_VERSION%%#'"${MYSQL_SHELL_VERSIONS[${VERSION}]}"'#g' tmpFile
-  sed -i 's#%%MAJOR_VERSION%%#'"${VERSION}"'#g' tmpFile
-  mv tmpFile "${VERSION}/inspec/control.rb"
+
+  sed 's#%%MYSQL_SERVER_PACKAGE%%#'"${MYSQL_SERVER_PACKAGE}"'#g' $DOCKERFILE_TEMPLATE > tmpfile
+  sed -i 's#%%REPO%%#'"${REPO}"'#g' tmpfile
+  REPO_VERSION=${MAJOR_VERSION//\./}
+  sed -i 's#%%REPO_VERSION%%#'"${REPO_VERSION}"'#g' tmpfile
+
+  sed -i 's#%%CONFIG_PACKAGE_NAME%%#'"${CONFIG_PACKAGE_NAME}"'#g' tmpfile
+  sed -i 's#%%CONFIG_PACKAGE_NAME_MINIMAL%%#'"${CONFIG_PACKAGE_NAME_MINIMAL}"'#g' tmpfile
+  sed -i 's#%%REPO_NAME_SERVER%%#'"${REPO_NAME_SERVER}"'#g' tmpfile
+  sed -i 's#%%REPO_NAME_TOOLS%%#'"${REPO_NAME_TOOLS}"'#g' tmpfile
+  sed -i 's#%%MYSQL_SHELL_PACKAGE%%#'"${MYSQL_SHELL_PACKAGE}"'#g' tmpfile
+  sed -i 's/%%PORTS%%/'"${PORTS}"'/g' tmpfile
+  mv tmpfile ${MAJOR_VERSION}/Dockerfile
+
+  # Dockerfile_spec.rb
+  if [ ! -d "${MAJOR_VERSION}/inspec" ]; then
+    mkdir "${MAJOR_VERSION}/inspec"
+  fi
+
+  sed 's#%%MYSQL_VERSION%%#'"${MYSQL_VERSION}"'#g' template/control.rb > tmpFile
+  sed -i 's#%%MYSQL_SERVER_PACKAGE_NAME%%#'"${MYSQL_SERVER_PACKAGE_NAME}"'#g' tmpFile
+  sed -i 's#%%MYSQL_SHELL_PACKAGE_NAME%%#'"${MYSQL_SHELL_PACKAGE_NAME}"'#g' tmpFile
+
+  sed -i 's#%%MAJOR_VERSION%%#'"${MAJOR_VERSION}"'#g' tmpFile
+  sed -i 's#%%MYSQL_SHELL_VERSION%%#'"${SHELL_VERSION}"'#g' tmpFile
+
+  sed -i 's#%%PORTS%%#'"1186/tcp, 2202/tcp, 3306/tcp, 33060-33061/tcp"'#g' tmpFile
+  mv tmpFile "${MAJOR_VERSION}/inspec/control.rb"
 
   # Entrypoint
-  sed 's#%%PASSWORDSET%%#'"${PASSWORDSET[${VERSION}]}"'#g' template/docker-entrypoint.sh > tmpfile
-  sed -i 's#%%DATABASE_INIT%%#'"${DATABASE_INIT[${VERSION}]}"'#g' tmpfile
-  sed -i 's#%%INIT_STARTUP%%#'"${INIT_STARTUP[${VERSION}]}"'#g' tmpfile
-  sed -i 's#%%STARTUP%%#'"${STARTUP[${VERSION}]}"'#g' tmpfile
-  sed -i 's#%%STARTUP_WAIT%%#'"${STARTUP_WAIT[${VERSION}]}"'#g' tmpfile
-  sed -i 's#%%FULL_SERVER_VERSION%%#'"${FULL_SERVER_VERSIONS[${VERSION}]}"'#g' tmpfile
-  sed -i 's#%%VALIDATE_CONFIG%%#'"${VALIDATE_CONFIG[${VERSION}]}"'#g' tmpfile
-  mv tmpfile ${VERSION}/docker-entrypoint.sh
-  chmod +x ${VERSION}/docker-entrypoint.sh
+  sed 's#%%PASSWORDSET%%#'"${PASSWORDSET}"'#g' template/docker-entrypoint.sh > tmpfile
+  sed -i 's#%%STARTUP%%#'"${STARTUP}"'#g' tmpfile
+  sed -i 's#%%FULL_SERVER_VERSION%%#'"${FULL_SERVER_VERSIONS[${MAJOR_VERSION}]}"'#g' tmpfile
+  sed -i 's#%%VALIDATE_CONFIG%%#'"${VALIDATE_CONFIG}"'#g' tmpfile
+  mv tmpfile ${MAJOR_VERSION}/docker-entrypoint.sh
+  chmod +x ${MAJOR_VERSION}/docker-entrypoint.sh
 
   # Healthcheck
-  cp template/healthcheck.sh ${VERSION}/
-  chmod +x ${VERSION}/healthcheck.sh
+  cp template/healthcheck.sh ${MAJOR_VERSION}/
+  chmod +x ${MAJOR_VERSION}/healthcheck.sh
 
   # Build-time preparation script
-  sed 's#%%PRECREATE_DIRS%%#'"${PRECREATE_DIRS[${VERSION}]}"'#g' template/prepare-image.sh > tmpfile
-  mv tmpfile ${VERSION}/prepare-image.sh
-  chmod +x ${VERSION}/prepare-image.sh
-done
+  sed 's#%%PRECREATE_DIRS%%#'"${PRECREATE_DIRS}"'#g' template/prepare-image.sh > tmpfile
+  mv tmpfile ${MAJOR_VERSION}/prepare-image.sh
+  chmod +x ${MAJOR_VERSION}/prepare-image.sh
+
+  # Copy cnf files
+  cp -r template/cnf ${MAJOR_VERSION}/
+}
+
+if [ -n "$MYSQL_VERSION" ]; then
+  MAJOR_VERSION=$(echo $MYSQL_VERSION | cut -d'.' -f'1,2')
+  SERVER_PKG_SUFFIX="-${MYSQL_VERSION}"
+  SHELL_PKG_SUFFIX="-${SHELL_VERSION}"
+  process_version $MAJOR_VERSION
+else
+  for MAJOR_VERSION in "${!MYSQL_CLUSTER_VERSIONS[@]}"
+  do
+    SHELL_VERSION="${MYSQL_SHELL_VERSIONS[$MAJOR_VERSION]}"
+    SHELL_PKG_SUFFIX="-${SHELL_VERSION}"
+    SERVER_PKG_SUFFIX="-${MYSQL_CLUSTER_VERSIONS[$MAJOR_VERSION]}"
+
+    process_version $MAJOR_VERSION
+  done
+fi
+
